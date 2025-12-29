@@ -1,0 +1,21 @@
+timestamp,disease,confidence
+2025-01-12T09:14:32.000Z,Melanoma,94.8
+2025-01-12T09:18:10.000Z,Melanocytic Nevus,88.3
+2025-01-12T09:22:41.000Z,Basal Cell Carcinoma,91.6
+2025-01-12T09:27:05.000Z,Actinic Keratosis,86.2
+2025-01-12T09:31:19.000Z,Melanoma,96.1
+2025-01-13T10:05:44.000Z,Benign Keratosis,84.7
+2025-01-13T10:12:28.000Z,Melanocytic Nevus,90.4
+2025-01-13T10:19:53.000Z,Melanoma,92.9
+2025-01-13T10:26:11.000Z,Vascular Lesion,81.3
+2025-01-13T10:33:36.000Z,Basal Cell Carcinoma,93.5
+2025-01-14T08:41:02.000Z,Actinic Keratosis,87.9
+2025-01-14T08:47:18.000Z,Melanocytic Nevus,89.6
+2025-01-14T08:53:44.000Z,Melanoma,97.2
+2025-01-14T09:01:27.000Z,Benign Keratosis,83.1
+2025-01-14T09:09:55.000Z,Dermatofibroma,79.8
+2025-01-15T11:14:06.000Z,Melanoma,95.4
+2025-01-15T11:20:39.000Z,Basal Cell Carcinoma,92.1
+2025-01-15T11:28:03.000Z,Melanocytic Nevus,88.9
+2025-01-15T11:35:48.000Z,Actinic Keratosis,85.6
+2025-01-15T11:42:17.000Z,Vascular Lesion,82.4
