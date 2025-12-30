@@ -6,7 +6,23 @@ let prediction = null;
 let history = JSON.parse(localStorage.getItem("predictionLogs")) || [];
 let filterDisease = "ALL";
 let minConfidence = 0;
+let imageReady = false;
 
+const spinnerStyle = document.createElement("style");
+spinnerStyle.innerHTML = `
+.spinner {
+  width:14px;
+  height:14px;
+  border:2px solid #bfdbfe;
+  border-top-color:#2563eb;
+  border-radius:50%;
+  animation:spin 0.8s linear infinite;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+`;
+document.head.appendChild(spinnerStyle);
 
 
 /* ========== ROUTER ========== */
@@ -124,14 +140,13 @@ function moduleCard(icon, title, desc, page) {
 
 
 /* ========== UPLOAD ========== */
+/* ========== UPLOAD ========== */
 function upload() {
   app.innerHTML = `
-    <!-- TOP BACK -->
     <div class="back-top">
       <button onclick="nav('landing')">← Back to Home</button>
     </div>
 
-    <!-- PAGE -->
     <section class="upload-page">
       <h1>Upload Skin Lesion Image</h1>
       <p class="subtitle">
@@ -139,26 +154,44 @@ function upload() {
       </p>
 
       <div class="upload-layout">
-        <!-- LEFT: UPLOAD -->
+        <!-- LEFT -->
         <div class="card upload-card">
           <h3>Image Upload</h3>
           <p class="hint">Drag and drop or click to select an image</p>
 
-          <div class="dropzone" onclick="document.getElementById('fileInput').click()">
-            <div class="upload-icon">⬆</div>
-            <p class="drop-main">Drop your image here or click to browse</p>
-            <p class="drop-sub">Supported formats: JPG, PNG (Max 10MB)</p>
-            <input
-              type="file"
-              id="fileInput"
-              hidden
-              accept="image/png, image/jpeg"
-              onchange="handleFile(event)"
-            />
-          </div>
+          ${
+            !uploadedImage
+              ? `
+                <div class="dropzone" onclick="document.getElementById('fileInput').click()">
+                  <div class="upload-icon">⬆</div>
+                  <p class="drop-main">Drop your image here or click to browse</p>
+                  <p class="drop-sub">Supported formats: JPG, PNG (Max 10MB)</p>
+                  <input
+                    type="file"
+                    id="fileInput"
+                    hidden
+                    accept="image/png, image/jpeg"
+                    onchange="handleFile(event)"
+                  />
+                </div>
+              `
+              : `
+                <img src="${uploadedImage}" style="width:100%;border-radius:12px;margin-bottom:16px;" />
+
+                <div class="grid grid-2">
+                  <button class="btn btn-outline" onclick="resetUpload()">
+                    🔁 Change Image
+                  </button>
+
+                  <button class="btn btn-primary" id="runBtn" onclick="runPrediction()">
+                    ▶ Run Prediction
+                  </button>
+                </div>
+              `
+          }
         </div>
 
-        <!-- RIGHT: INSTRUCTIONS -->
+        <!-- RIGHT -->
         <div class="side-column">
           <div class="card info-card">
             <h3>Instructions</h3>
@@ -183,93 +216,296 @@ function upload() {
 }
 
 
-function handleFile(e){
-const r=new FileReader();
-r.onload=()=>{ uploadedImage=r.result; simulate(); };
-r.readAsDataURL(e.target.files[0]);
+
+function handleFile(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const r = new FileReader();
+  r.onload = () => {
+    uploadedImage = r.result;
+    imageReady = true;
+    upload(); // re-render upload page with preview + buttons
+  };
+  r.readAsDataURL(file);
 }
 
-function simulate(){
-setTimeout(()=>{
-prediction={
-disease:["Melanoma","Nevus","BCC","AK"][Math.floor(Math.random()*4)],
-confidence:0.75+Math.random()*0.24,
-image:uploadedImage,
-time:new Date().toISOString()
-};
-history.unshift(prediction);
-nav("result");
-},1500);
+function resetUpload() {
+  uploadedImage = null;
+  imageReady = false;
+  upload();
 }
+
+function runPrediction() {
+  const btn = document.getElementById("runBtn");
+
+  if (!uploadedImage) return;
+
+  btn.disabled = true;
+  btn.innerHTML = `
+    <span style="display:flex;align-items:center;gap:8px;">
+      <span class="spinner"></span>
+      Running Prediction...
+    </span>
+  `;
+
+  simulate();
+}
+
+
 
 /* ========== RESULT ========== */
+/* ========== RESULT (FIGMA-MATCHED) ========== */
 function result() {
-  const conf = (prediction.confidence * 100).toFixed(1);
+  const confPercent = (prediction.confidence * 100).toFixed(2);
+  const analyzedTime = new Date(prediction.time).toLocaleString();
 
   app.innerHTML = `
+    <!-- TOP NAV -->
     <div class="back-top">
-      <button onclick="nav('landing')">← Back to Home</button>
+      <button onclick="nav('upload')">← New Prediction</button>
     </div>
 
-    <div class="section">
-      <h1 class="page-title">Prediction Result</h1>
-      <p class="page-sub">AI-powered disease classification output</p>
+    <!-- STATUS -->
+    <section class="section center">
+      <span class="pill" style="background:#dcfce7;color:#16a34a;">
+        ✔ Prediction Complete
+      </span>
+      <h2 style="margin-top:12px;">Analysis Results</h2>
+      <p class="page-sub">
+        AI-powered classification completed using ResNet50 architecture
+      </p>
+    </section>
 
-      <div class="card">
-        <img src="${prediction.image}" style="width:100%; border-radius:8px;">
-        <h3 style="margin-top:16px;">${prediction.disease}</h3>
-        <p style="color:var(--primary); font-weight:500;">
-          Confidence: ${conf}%
-        </p>
+    <!-- MAIN RESULT -->
+    <section class="container">
+      <div class="grid grid-2">
 
-        <button class="btn btn-primary" onclick="nav('explain')">
-          View Grad-CAM Explainability
-        </button>
+        <!-- LEFT: IMAGE -->
+        <div class="card">
+          <h3>Input Image</h3>
+          <img src="${prediction.image}"
+            style="width:100%;border-radius:10px;margin:12px 0;" />
+          <p style="font-size:12px;color:#2563eb;">
+            Analyzed: ${analyzedTime}
+          </p>
+        </div>
+
+        <!-- RIGHT: PREDICTION -->
+        <div class="card">
+          <h3>Predicted Classification</h3>
+          <p style="font-size:13px;color:#2563eb;margin-bottom:14px;">
+            Most likely disease category based on visual features
+          </p>
+
+          <p><strong>Predicted Disease:</strong></p>
+          <span class="badge badge-med">${prediction.disease}</span>
+
+          <div style="margin-top:18px;">
+            <p><strong>Confidence Score:</strong></p>
+
+            <div style="background:#e5e7eb;border-radius:6px;height:8px;margin:8px 0;">
+              <div style="
+                width:${confPercent}%;
+                background:#020617;
+                height:8px;
+                border-radius:6px;
+              "></div>
+            </div>
+
+            <p style="font-size:13px;color:#2563eb;">
+              ${confPercent}% – Moderate confidence prediction
+            </p>
+          </div>
+
+          <!-- MODEL INFO -->
+          <div class="card info" style="margin-top:20px;">
+            <h4>Model Information</h4>
+            <p style="font-size:13px;">
+              <strong>Architecture:</strong> ResNet50<br>
+              <strong>Training Dataset:</strong> HAM10000<br>
+              <strong>Model Accuracy:</strong> 95.8%
+            </p>
+          </div>
+        </div>
       </div>
-    </div>
+
+      <!-- NEXT STEPS -->
+      <div class="card mt center">
+        <h3>Next Steps</h3>
+
+        <div class="grid grid-2 mt">
+          <button class="btn btn-primary" onclick="nav('explain')">
+            👁 View Grad-CAM Heatmap
+          </button>
+
+          <button class="btn btn-outline" onclick="nav('upload')">
+            Analyze Another Image
+          </button>
+
+          <button class="btn btn-outline" onclick="nav('compare')">
+            Compare Models
+          </button>
+
+          <button class="btn btn-outline" onclick="nav('logs')">
+            View Prediction History
+          </button>
+        </div>
+      </div>
+
+      <!-- DISCLAIMER -->
+      <div class="card warning mt">
+        <strong>Research Use Only</strong>
+        <p style="font-size:13px;margin-top:6px;">
+          This prediction is for academic research purposes only and should not
+          be used for clinical diagnosis. Always consult qualified medical
+          professionals for health concerns.
+        </p>
+      </div>
+    </section>
   `;
 }
+
 
 
 /* ========== EXPLAINABILITY ========== */
+/* ========== EXPLAINABILITY (FIGMA-MATCHED) ========== */
 function explain() {
   app.innerHTML = `
+    <!-- BACK -->
     <div class="back-top">
-      <button onclick="nav('landing')">← Back to Home</button>
+      <button onclick="nav('result')">← Back to Results</button>
     </div>
 
-    <div class="section">
-      <h1 class="page-title">Grad-CAM Explainability</h1>
+    <!-- HEADER -->
+    <section class="section center">
+      <h1>Explainable AI - Grad-CAM Visualization</h1>
       <p class="page-sub">
-        Visual interpretation of model attention regions
+        Gradient-weighted Class Activation Mapping (Grad-CAM) highlights the regions
+        in the image that most influenced the model's prediction decision.
       </p>
+    </section>
 
-      <div class="card">
-        <canvas id="cam"></canvas>
+    <!-- IMAGES -->
+    <section class="container">
+      <div class="grid grid-2">
+
+        <!-- ORIGINAL -->
+        <div class="card">
+          <h3>Original Image</h3>
+          <p style="font-size:13px;color:#2563eb;">Input dermatological image</p>
+          <img src="${prediction.image}"
+            style="width:100%;border-radius:12px;margin-top:12px;" />
+        </div>
+
+        <!-- HEATMAP -->
+        <div class="card">
+          <h3>Grad-CAM Heatmap</h3>
+          <p style="font-size:13px;color:#2563eb;">
+            Activation intensity overlay
+          </p>
+
+          <canvas id="cam" style="width:100%;border-radius:12px;margin-top:12px;"></canvas>
+
+          <button class="btn btn-primary mt" onclick="downloadHeatmap()">
+            ⬇ Download Heatmap
+          </button>
+        </div>
+      </div>
+
+      <!-- EXPLANATION -->
+      <div class="grid grid-2 mt">
+
+        <!-- TEXT -->
+        <div class="card">
+          <h3>Understanding Grad-CAM</h3>
+
+          <p><strong>How It Works</strong></p>
+          <p style="font-size:13px;">
+            Grad-CAM uses the gradients of the target concept flowing into the final
+            convolutional layer to produce a coarse localization map highlighting
+            important regions in the image.
+          </p>
+
+          <p><strong>Interpretation</strong></p>
+          <p style="font-size:13px;">
+            Warmer colors (red, orange) indicate regions that strongly activated neurons
+            associated with the predicted class. These areas are most relevant to the
+            classification decision.
+          </p>
+
+          <p><strong>Clinical Relevance</strong></p>
+          <p style="font-size:13px;">
+            This visualization helps assess whether the model focuses on diagnostically
+            meaningful features such as lesion borders, texture, and color patterns.
+          </p>
+        </div>
+
+        <!-- LEGEND -->
+        <div class="card">
+          <h3>Heat Intensity Legend</h3>
+
+          ${legendItem("#ef4444", "High Activation", "Strong influence")}
+          ${legendItem("#fb923c", "Medium Activation", "Moderate influence")}
+          ${legendItem("#facc15", "Low Activation", "Minimal influence")}
+          ${legendItem("#e5e7eb", "No Activation", "Not relevant")}
+        </div>
+      </div>
+    </section>
+  `;
+
+  drawGradCAM();
+}
+
+function legendItem(color, title, desc) {
+  return `
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+      <div style="
+        width:22px;
+        height:22px;
+        background:${color};
+        border-radius:4px;
+      "></div>
+      <div>
+        <strong style="font-size:13px;">${title}</strong><br>
+        <span style="font-size:12px;color:#64748b;">${desc}</span>
       </div>
     </div>
   `;
+}
 
+function drawGradCAM() {
   const img = new Image();
   img.onload = () => {
-    const c = document.getElementById("cam");
-    c.width = img.width;
-    c.height = img.height;
-    const ctx = c.getContext("2d");
+    const canvas = document.getElementById("cam");
+    canvas.width = img.width;
+    canvas.height = img.height;
+    const ctx = canvas.getContext("2d");
+
     ctx.drawImage(img, 0, 0);
 
     const g = ctx.createRadialGradient(
-      img.width / 2, img.height / 2, 30,
-      img.width / 2, img.height / 2, img.width / 1.8
+      img.width / 2, img.height / 2, 40,
+      img.width / 2, img.height / 2, img.width / 1.6
     );
-    g.addColorStop(0, "rgba(255,0,0,0.55)");
+    g.addColorStop(0, "rgba(255,0,0,0.6)");
+    g.addColorStop(0.4, "rgba(255,165,0,0.45)");
     g.addColorStop(1, "rgba(255,255,0,0)");
 
     ctx.fillStyle = g;
-    ctx.fillRect(0, 0, c.width, c.height);
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
   };
   img.src = prediction.image;
 }
+
+function downloadHeatmap() {
+  const canvas = document.getElementById("cam");
+  const link = document.createElement("a");
+  link.download = "gradcam_heatmap.png";
+  link.href = canvas.toDataURL();
+  link.click();
+}
+
 
 
 /* ========== MODEL COMPARISON ========== */
@@ -447,82 +683,129 @@ function dataset() {
 
 
 /* ========== LOGS ========== */
+/* ========== PREDICTION HISTORY (ENHANCED) ========== */
 function logs() {
   const stats = logStats();
-  const logs = filteredLogs();
+  const rows = history;
 
   app.innerHTML = `
+    <!-- BACK -->
     <div class="back-top">
       <button onclick="nav('landing')">← Back to Home</button>
     </div>
 
-    <div class="section">
-      <h1 class="page-title">Prediction Logs</h1>
-      <p class="page-sub">Session + imported historical predictions</p>
+    <!-- HEADER -->
+    <section class="section center">
+      <h1>Prediction History</h1>
+      <p class="page-sub">
+        Chronological log of all image analyses and model predictions
+      </p>
+    </section>
+
+    <!-- RECENT PREDICTIONS -->
+    <section class="container">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <div>
+            <h3>Recent Predictions</h3>
+            <p style="font-size:13px;color:#2563eb;">
+              ${history.length} total predictions recorded
+            </p>
+          </div>
+          <button class="btn btn-outline" onclick="exportCSV()">📄</button>
+        </div>
+
+        <table style="margin-top:14px;">
+          <thead>
+            <tr>
+              <th>Timestamp</th>
+              <th>Image</th>
+              <th>Predicted Class</th>
+              <th>Confidence</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${
+              rows.length
+                ? rows.map(h => `
+                  <tr>
+                    <td style="font-size:13px;color:#2563eb;">
+                      ${new Date(h.time).toLocaleString()}
+                    </td>
+
+                    <td>
+                      <img src="${h.image || prediction?.image || ''}"
+                        style="width:46px;height:46px;border-radius:8px;object-fit:cover;">
+                    </td>
+
+                    <td>
+                      <span class="badge badge-med">
+                        ${h.disease}
+                      </span>
+                    </td>
+
+                    <td>
+                      <span class="badge ${
+                        h.confidence >= 0.9
+                          ? "badge-high"
+                          : h.confidence >= 0.8
+                          ? "badge-med"
+                          : "badge-low"
+                      }">
+                        ${(h.confidence * 100).toFixed(1)}%
+                      </span>
+                    </td>
+
+                    <td>
+                      <button class="link" onclick="viewLog('${h.time}')">
+                        👁 View
+                      </button>
+                    </td>
+                  </tr>
+                `).join("")
+                : `
+                  <tr>
+                    <td colspan="5" style="text-align:center;font-size:13px;">
+                      No predictions recorded
+                    </td>
+                  </tr>
+                `
+            }
+          </tbody>
+        </table>
+      </div>
 
       <!-- STATS -->
       <div class="grid grid-3 mt">
-        <div class="card stat-card">
+        <div class="card center">
           <div class="stat-value">${stats.total}</div>
           <div class="stat-label">Total Predictions</div>
         </div>
-        <div class="card stat-card">
+
+        <div class="card center">
           <div class="stat-value">${stats.avg}%</div>
           <div class="stat-label">Average Confidence</div>
         </div>
-        <div class="card stat-card">
-          <div class="stat-value">${stats.top}</div>
-          <div class="stat-label">Most Predicted Disease</div>
+
+        <div class="card center">
+          <div class="stat-value">
+            ${history.filter(h => h.confidence >= 0.9).length}
+          </div>
+          <div class="stat-label">High Confidence Predictions</div>
         </div>
       </div>
-
-      <!-- CONTROLS -->
-      <div class="card mt">
-        <label>Disease Filter</label>
-        <select onchange="filterDisease=this.value; nav('logs')">
-          <option value="ALL">All</option>
-          ${uniqueDiseases().map(d =>
-            `<option ${d===filterDisease?"selected":""}>${d}</option>`
-          ).join("")}
-        </select>
-
-        <label style="margin-left:12px;">
-          Min Confidence (${minConfidence}%)
-        </label>
-        <input type="range" min="0" max="100" value="${minConfidence}"
-          oninput="minConfidence=this.value; nav('logs')">
-
-        <div style="margin-top:12px;">
-          <button class="btn btn-primary" onclick="exportCSV()">⬇ Export CSV</button>
-          <label class="btn btn-outline">
-            ⬆ Import CSV
-            <input type="file" hidden accept=".csv" onchange="importCSV(event)">
-          </label>
-          <button class="btn btn-outline" onclick="clearLogs()">🗑 Clear Logs</button>
-        </div>
-      </div>
-
-      <!-- TABLE -->
-      <div class="card mt">
-        <table>
-          <tr>
-            <th>Timestamp</th>
-            <th>Disease</th>
-            <th>Confidence</th>
-          </tr>
-          ${logs.map(h => `
-            <tr style="background:${h.confidence>=0.9?'#ecfeff':''}">
-              <td>${new Date(h.time).toLocaleString()}</td>
-              <td>${h.disease}</td>
-              <td>${(h.confidence * 100).toFixed(1)}%</td>
-            </tr>
-          `).join("")}
-        </table>
-      </div>
-    </div>
+    </section>
   `;
 }
 
+function viewLog(time) {
+  const item = history.find(h => h.time === time);
+  if (!item) return;
+
+  prediction = item;
+  nav("result");
+}
 
 
 
